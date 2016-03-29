@@ -20,6 +20,11 @@ from .decorators import apply_defaults as _apply_defaults
 
 
 def apply_defaults(func):
+    try:
+        func_code = func.__code__  # Python 3 only
+    except AttributeError:
+        func_code = func.func_code  # Python 2 only
+
     warnings.warn_explicit(
         """
         You are importing apply_defaults from airflow.utils which
@@ -29,7 +34,7 @@ def apply_defaults(func):
         from airflow.utils.decorators import apply_defaults
         """,
         category=PendingDeprecationWarning,
-        filename=func.func_code.co_filename,
-        lineno=func.func_code.co_firstlineno + 1
+        filename=func_code.co_filename,
+        lineno=func_code.co_firstlineno + 1
     )
     return _apply_defaults(func)
