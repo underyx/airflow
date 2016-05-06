@@ -10,7 +10,7 @@ from airflow.exceptions import AirflowException
 from airflow.executors.base_executor import BaseExecutor
 from airflow import configuration
 
-PARALLELISM = configuration.get('core', 'PARALLELISM')
+PARALLELISM = configuration.get('core', 'max_active_tasks')
 
 '''
 To start the celery worker, run the command:

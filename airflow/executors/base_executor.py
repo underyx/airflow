@@ -4,7 +4,7 @@ from airflow import configuration
 from airflow.utils.state import State
 from airflow.utils.logging import LoggingMixin
 
-PARALLELISM = configuration.getint('core', 'PARALLELISM')
+PARALLELISM = configuration.getint('core', 'max_active_tasks')
 
 
 class BaseExecutor(LoggingMixin):

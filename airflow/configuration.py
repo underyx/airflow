@@ -76,7 +76,7 @@ def run_command(command):
 defaults = {
     'core': {
         'unit_test_mode': False,
-        'parallelism': 32,
+        'max_active_tasks': 32,
         'load_examples': True,
         'plugins_folder': None,
         'security': None,
@@ -85,8 +85,8 @@ defaults = {
         'remote_log_conn_id': '',
         'encrypt_s3_logs': False,
         's3_log_folder': '', # deprecated!
-        'dag_concurrency': 16,
-        'max_active_runs_per_dag': 16,
+        'max_active_tasks_for_worker': 16,
+        'default_max_active_runs_of_dags': 16,
         'executor': 'SequentialExecutor',
         'dags_are_paused_at_creation': True,
         'sql_alchemy_pool_size': 5,
@@ -145,6 +145,18 @@ defaults = {
     }
 }
 
+# this dict maps old config variable names to new ones
+# set value to None to just deprectate a config variable entirely
+deprecation_aliases = {
+    'core': {
+        'parallelism': 'max_active_tasks',
+        'dag_concurrency': 'max_active_tasks_for_worker',
+        'max_active_runs_per_dag': 'default_max_active_runs_of_dags',
+        'non_pooled_task_slot_count': None,
+    },
+}
+
+
 DEFAULT_CONFIG = """\
 [core]
 # The home folder for airflow, default is ~/airflow
@@ -186,13 +198,12 @@ sql_alchemy_pool_size = 5
 # not apply to sqlite.
 sql_alchemy_pool_recycle = 3600
 
-# The amount of parallelism as a setting to the executor. This defines
-# the max number of task instances that should run simultaneously
-# on this airflow installation
-parallelism = 32
+# This defines the max number of task instances that can run simultaneously
+# across all workers.
+max_active_tasks = 32
 
 # The number of task instances allowed to run concurrently by the scheduler
-dag_concurrency = 16
+max_active_tasks_for_worker = 16
 
 # Are DAGs paused by default at creation
 dags_are_paused_at_creation = True
@@ -201,8 +212,9 @@ dags_are_paused_at_creation = True
 # whose size is guided by this config element
 non_pooled_task_slot_count = 128
 
-# The maximum number of active DAG runs per DAG
-max_active_runs_per_dag = 16
+# The maximum number of active DAG runs per DAG. You can override this for
+# specific DAGs with the max_active_runs keyword argument.
+default_max_active_runs_of_dags = 16
 
 # Whether to load the examples that ship with Airflow. It's good to
 # get started, but you probably want to set this to False in a production
@@ -384,7 +396,7 @@ sql_alchemy_conn = sqlite:///{AIRFLOW_HOME}/unittests.db
 unit_test_mode = True
 load_examples = True
 donot_pickle = False
-dag_concurrency = 16
+max_active_tasks_for_worker = 16
 dags_are_paused_at_creation = False
 fernet_key = {FERNET_KEY}
 non_pooled_task_slot_count = 128
@@ -438,6 +450,7 @@ class ConfigParserWithDefaults(ConfigParser):
 
     def __init__(self, defaults, *args, **kwargs):
         self.defaults = defaults
+        self.deprecation_aliases = deprecation_aliases
         ConfigParser.__init__(self, *args, **kwargs)
         self.is_validated = False
 
@@ -566,6 +579,22 @@ class ConfigParserWithDefaults(ConfigParser):
                 if display_source:
                     opt = (opt, 'bash cmd')
                 cfg.setdefault(section, OrderedDict()).update({key: opt})
+
+        # resolve deprecation aliases
+        for section in self.deprecation_aliases:
+            for old_name, new_name in section.items():
+                if old_name in cfg[section]:
+                    if new_name is not None:
+                        cfg[section][new_name] = cfg[section].pop(old_name)
+                        warnings.warn(
+                            "The '{0}' setting is now called '{1}'".format(old_name, new_name),
+                            DeprecationWarning,
+                        )
+                    else:
+                        warnings.warn(
+                            "The '{0}' setting is now deprecated".format(old_name),
+                            DeprecationWarning,
+                        )
 
         # add defaults
         for section in sorted(self.defaults):

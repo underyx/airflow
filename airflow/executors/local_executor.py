@@ -9,7 +9,7 @@ from airflow.executors.base_executor import BaseExecutor
 from airflow.utils.state import State
 from airflow.utils.logging import LoggingMixin
 
-PARALLELISM = configuration.get('core', 'PARALLELISM')
+PARALLELISM = configuration.get('core', 'max_active_tasks')
 
 
 class LocalWorker(multiprocessing.Process, LoggingMixin):
@@ -73,4 +73,3 @@ class LocalExecutor(BaseExecutor):
         [self.queue.put((None, None)) for w in self.workers]
         # Wait for commands to finish
         self.queue.join()
-

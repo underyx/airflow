@@ -1201,7 +1201,7 @@ class TaskInstance(Base):
             self.start_date = datetime.now()
 
             if not mark_success and self.state != State.QUEUED and (
-                    self.pool or self.task.dag.concurrency_reached):
+                    self.pool or self.task.dag.max_active_tasks_reached):
                 # If a pool is set for this task, marking the task instance
                 # as QUEUED
                 self.state = State.QUEUED
@@ -2397,9 +2397,9 @@ class DAG(LoggingMixin):
         accessible in templates, namespaced under `params`. These
         params can be overridden at the task level.
     :type params: dict
-    :param concurrency: the number of task instances allowed to run
+    :param max_active_tasks: the number of task instances allowed to run
         concurrently
-    :type concurrency: int
+    :type max_active_tasks: int
     :param max_active_runs: maximum number of active DAG runs, beyond this
         number of DAG runs in a running state, the scheduler won't create
         new active DAG runs
@@ -2420,9 +2420,10 @@ class DAG(LoggingMixin):
             template_searchpath=None,
             user_defined_macros=None,
             default_args=None,
-            concurrency=configuration.getint('core', 'dag_concurrency'),
+            concurrency=None,  # deprecated
+            max_active_tasks=configuration.getint('core', 'max_active_tasks_for_worker'),
             max_active_runs=configuration.getint(
-                'core', 'max_active_runs_per_dag'),
+                'core', 'default_max_active_runs_for_dags'),
             dagrun_timeout=None,
             sla_miss_callback=None,
             params=None):
@@ -2455,7 +2456,13 @@ class DAG(LoggingMixin):
         self.parent_dag = None  # Gets set when DAGs are loaded
         self.last_loaded = datetime.now()
         self.safe_dag_id = dag_id.replace('.', '__dot__')
-        self.concurrency = concurrency
+        self.max_active_tasks = max_active_tasks
+        if concurrency is not None:
+            self.max_active_tasks = concurrency
+            warnings.warn(
+                "The 'concurrency' keyword argument is now called 'max_active_tasks'",
+                DeprecationWarning,
+            )
         self.max_active_runs = max_active_runs
         self.dagrun_timeout = dagrun_timeout
         self.sla_miss_callback = sla_miss_callback
@@ -2575,10 +2582,10 @@ class DAG(LoggingMixin):
 
     @property
     @provide_session
-    def concurrency_reached(self, session=None):
+    def max_active_tasks_reached(self, session=None):
         """
-        Returns a boolean indicating whether the concurrency limit for this DAG
-        has been reached
+        Returns a boolean indicating whether the max_active_tasks limit for this
+        DAG has been reached
         """
         TI = TaskInstance
         qry = session.query(func.count(TI.task_id)).filter(
@@ -2586,7 +2593,7 @@ class DAG(LoggingMixin):
             TI.task_id.in_(self.task_ids),
             TI.state == State.RUNNING,
         )
-        return qry.scalar() >= self.concurrency
+        return qry.scalar() >= self.max_active_tasks
 
     @property
     @provide_session

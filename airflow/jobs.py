@@ -668,7 +668,7 @@ class SchedulerJob(BaseJob):
 
                 if dag.dag_id in dag_blacklist:
                     continue
-                if dag.concurrency_reached:
+                if dag.max_active_tasks_reached:
                     dag_blacklist.add(dag.dag_id)
                     continue
                 if ti.are_dependencies_met():
